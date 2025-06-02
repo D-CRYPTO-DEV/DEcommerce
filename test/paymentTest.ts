@@ -1,0 +1,135 @@
+import { expect } from "chai";
+import * as fs from "fs";
+import { toHex, hexToString, parseEther, formatEther } from "viem";
+import { viem } from "hardhat";
+import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
+import { bigint } from "hardhat/internal/core/params/argumentTypes";
+import path from "path";
+import { Address } from "viem";
+import hre from "hardhat";
+
+
+
+async function deployContract() {
+  const publicClient  = await viem.getPublicClient();
+  const [deployer, otherAccount] = await viem.getWalletClients();
+  const paymentContract = await viem.deployContract("paymentContract", [
+    deployer.account.address,
+  ],
+  {
+     client: {
+    wallet: otherAccount,
+  },
+  }
+
+  );
+  return{
+    paymentContract,
+    deployer,
+    otherAccount,
+  }
+  
+
+ 
+ 
+} 
+describe("paymentTest", async () => {
+
+
+
+  describe("when the contract is deployed", async () => {
+    it("the payment amount is zero", async () => {
+      const { paymentContract, deployer, otherAccount } = await loadFixture(deployContract);
+      // make paymentContract available for further tests
+      expect(await paymentContract.read.getpaymentAmount()).to.equal(0n);
+      // Add your test logic here, for example:
+      // expect(await paymentContract.getVotesForAllProposals()).to.deep.equal([0, 0, 0]);
+    });
+    
+    it("sets the deployer address as chairperson", async () => {
+     
+    });
+    it("set the balance of deployer to 1000 token", async () => {
+     
+    });
+     
+  });
+
+  describe("when the contractadmin interacts with the giveRightToVote function in the contract", async () => {
+    it("gives right to vote for another address", async () => {
+    
+    });
+    it("can not vote with more than your voting power", async () => {
+    
+    });
+   
+  });
+
+  describe("when the voter interacts with the vote function in the contract", async () => {
+    // TODO
+    it("should register the vote", async () => {
+     
+      
+     
+     
+    });
+  });
+
+  describe("when the voter interacts with the delegate function in the contract", async () => {
+    // TODO
+    it("should transfer voting power", async () => {
+      throw Error("Not implemented");
+    });
+  });
+
+ 
+
+  describe("when an account without right to vote interacts with the vote function in the contract", async () => {
+    // TODO
+    it("should revert", async () => {
+      throw Error("Not implemented");
+    });
+  });
+
+  describe("when an account without right to vote interacts with the delegate function in the contract", async () => {
+    // TODO
+    it("should revert", async () => {
+      throw Error("Not implemented");
+    });
+  });
+
+  describe("when someone interacts with the winningProposal function before any votes are cast", async () => {
+    // TODO
+    it("should return 0", async () => {
+      throw Error("Not implemented");
+    });
+  });
+
+  describe("when someone interacts with the winningProposal function after one vote is cast for the first proposal", async () => {
+    // TODO
+    it("should return 0", async () => {
+      throw Error("Not implemented");
+    });
+  });
+
+  describe("when someone interacts with the winnerName function before any votes are cast", async () => {
+    // TODO
+    it("should return name of proposal 0", async () => {
+      throw Error("Not implemented");
+    });
+  });
+
+  describe("when someone interacts with the winnerName function after one vote is cast for the first proposal", async () => {
+    // TODO
+    it("should return name of proposal 0", async () => {
+      throw Error("Not implemented");
+    });
+  });
+
+  describe("when someone interacts with the winningProposal function and winnerName after 5 random votes are cast for the proposals", async () => {
+    // TODO
+    it("should return the name of the winner proposal", async () => {
+      throw Error("Not implemented");
+    });
+  });
+});

@@ -29,6 +29,10 @@ contract paymentContract {
         emit paymentSucess(msg.sender, "Payment registration sucessful");
     }
 
+    function getPayment(address _sellerAdresss) public view returns (uint256) {
+        return PaymentsTOContract[msg.sender][_sellerAdresss];
+    }
+
     function acknowledgeGoodsReceiption(address _sellerAdresss) public {
         require(PaymentsTOContract[msg.sender][_sellerAdresss] > 0, "No payment made to this seller");
         _sellerAdresss.transfer(PaymentsTOContract[msg.sender][_sellerAdresss]);
