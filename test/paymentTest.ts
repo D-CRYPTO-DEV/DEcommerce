@@ -12,7 +12,7 @@ import hre from "hardhat";
 
 async function deployContract() {
   const publicClient  = await viem.getPublicClient();
-  const [deployer, otherAccount] = await viem.getWalletClients();
+  const [deployer, buyer, sellerwallet, otherAccount] = await viem.getWalletClients();
   const paymentContract = await viem.deployContract("paymentContract", [
     deployer.account.address,
   ],
@@ -26,6 +26,8 @@ async function deployContract() {
   return{
     paymentContract,
     deployer,
+    sellerwallet,
+    buyer,
     otherAccount,
   }
   
@@ -38,10 +40,10 @@ describe("paymentTest", async () => {
 
 
   describe("when the contract is deployed", async () => {
-    it("the payment amount is zero", async () => {
-      const { paymentContract, deployer, otherAccount } = await loadFixture(deployContract);
+   it("the payment amount is zero", async () => {
+      const { paymentContract, deployer, sellerwallet, otherAccount } = await loadFixture(deployContract);
       // make paymentContract available for further tests
-      expect(await paymentContract.read.getpaymentAmount()).to.equal(0n);
+      expect(await paymentContract.read.getpaymentAmount([sellerwallet])).to.equal(0n);
       // Add your test logic here, for example:
       // expect(await paymentContract.getVotesForAllProposals()).to.deep.equal([0, 0, 0]);
     });
