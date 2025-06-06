@@ -24,6 +24,7 @@ async function deployContract() {
 
   );
   return{
+    publicClient,
     paymentContract,
     deployer,
     sellerwallet,
@@ -43,13 +44,34 @@ describe("paymentTest", async () => {
    it("the payment amount is zero", async () => {
       const { paymentContract, deployer, sellerwallet, otherAccount } = await loadFixture(deployContract);
       // make paymentContract available for further tests
-      expect(await paymentContract.read.getpaymentAmount([sellerwallet])).to.equal(0n);
+      expect(await paymentContract.read.getPayment([sellerwallet.account.address])).to.equal(0n);
       // Add your test logic here, for example:
       // expect(await paymentContract.getVotesForAllProposals()).to.deep.equal([0, 0, 0]);
     });
     
-    it("sets the deployer address as chairperson", async () => {
-     
+    it("set paymentamount to the amount to be paid ", async () => {
+      const { publicClient, paymentContract, deployer, sellerwallet, otherAccount } = await loadFixture(deployContract);
+      const price = parseEther("2");
+      const price2 = await paymentContract.write.pay([ 
+        sellerwallet.account.address,
+        price,
+      ], {
+        value: price,
+      });
+      const price3 = await paymentContract.write.pay([ 
+        sellerwallet.account.address,
+        price,
+      ], {
+        value: price,
+      });
+      const ContractADD = paymentContract.address
+      console.log(price2)
+      console.log( await publicClient.getBalance({
+        address: ContractADD,
+      }));
+      expect(await paymentContract.read.getPayment([sellerwallet.account.address])).to.equal(price);
+      
+
     });
     it("set the balance of deployer to 1000 token", async () => {
      
