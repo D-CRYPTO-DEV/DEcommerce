@@ -16,9 +16,9 @@ contract paymentContract {
 
     modifier paymentModifier {
         
-        assert(balanceOf(msg.sender) > 0);
+        assert((msg.sender).balance > 0);
         require(msg.value > 0, "Payment must be greater than zero");
-        require(balanceOf(msg.sender) > msg.value, "insuffient balance for this transaction" );
+        require((msg.sender).balance > msg.value, "insuffient balance for this transaction" );
         assert(msg.sender != address(0));
        
         _;

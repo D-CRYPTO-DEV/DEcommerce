@@ -24,6 +24,20 @@ contract governanceToken is ERC20, ERC20Burnable, Ownable, ERC20Permit, ERC20Vot
         _mint(to, amount);
     }
 
+    function transfer(address to, uint256 amount) public override returns (bool) {
+        return false;
+    }
+
+    // Override the transferFrom function to restrict transfers
+    function transferFrom(address from, address to, uint256 amount) public override returns (bool) {
+        return false;
+    }
+
+    // Override the approve function to restrict approvals
+    function approve(address spender, uint256 amount) public override returns (bool) {
+        return false;
+    }
+
     function burnfrom(address _useradd) public override onlyOwner(ERC20, ERC20Burnable) {
         super.burn(address(_useradd), balanceOf(_useradd));
     }

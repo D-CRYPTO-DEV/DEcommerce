@@ -23,15 +23,26 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
         function getPaymentToDAO(address _useradd) external view returns (uint256);
        
     }
+
+    IgovernanceToken public governanceToken;
+    IpaymentContract public paymentContract;
     
-    
-    constructor(IVotes _token, TimelockController _timelock)
+    uint256 public standardtransactionPower;
+    event JoinedDAO(address DAOApplicant,address _DAOAddress);
+    constructor(IVotes _token, TimelockController _timelock, address _governanceToken, address _paymentContract, _standardtransactionPower)
         Governor("MyGovernor")
         GovernorSettings(4 hours, 1 weeks, 0)
         GovernorVotes(_token)
         GovernorVotesQuorumFraction(4)
         GovernorTimelockControl(_timelock)
-    {}
+    { 
+        require(_governanceToken != address(0), "Invalid governance token address");
+        require(_paymentContract != address(0), "Invalid payment contract address");
+        
+        governanceToken = IgovernanceToken(_governanceToken);
+        paymentContract = IpaymentContract(_paymentContract);
+        standardtransactionPower = _standardtransactionPower;
+    }
 
     // The following functions are overrides required by Solidity.
 
@@ -102,11 +113,60 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
         return super._executor();
     }
 
-    function joinDAO(address _DAOAddress) public {
-        require(_DAOAddress != address(0), "Invalid DAO address");
+    function standardtransactionPower(uint256 _standardtransactionPower)
+        internal   
+    {
+        standardtransactionPower = _standardtransactionPower;
+    }
 
+    function joinDAO(address _DAOAddress) external {
+        require(_DAOAddress != address(0), "Invalid DAO address");
+        require(governanceToken.balanceOf(msg.sender) > 0, "You must hold governance tokens to join the DAO");
+        require(paymentContract.getPaymentToDAO(msg.sender) > standardtransactionPower , "You must have made a payment to the DAO to join");
+        governanceToken.mint(msg.sender, 1000); // Minting 1000 governance tokens to the user as as voting power
         // Logic to join the DAO, such as transferring tokens or registering
         // This is a placeholder for actual DAO joining logic   
+        emit JoinedDAO(msg.sender, _DAOAddress);
+    }
+
+    function _removeMemberFromDAO(address _memberAddress) internal {
+        require(_memberAddress != address(0), "Invalid member address");
+        require(governanceToken.balanceOf(_memberAddress) > 0, "Member does not hold governance tokens");
+        // Logic to remove the member from the DAO
+        // This is a placeholder for actual DAO removal logic
+        governanceToken.burnfrom(_memberAddress); // Burn the governance tokens of the member
+    }   
+
+ // Function to commit a vote
+    function commitVote(uint256 proposalId, bytes32 commitHash) public {
+        require(block.timestamp < proposalEndTimes[proposalId], "Voting period has ended");
+        voteCommits[proposalId][msg.sender] = commitHash;
+        emit VoteCommitted(proposalId, msg.sender, commitHash);
+    }
+
+    // Function to reveal a vote
+    function revealVote(uint256 proposalId, bool support, uint256 salt) public {
+        require(block.timestamp >= proposalEndTimes[proposalId], "Voting period has not ended");
+        bytes32 commitHash = keccak256(abi.encodePacked(support, salt));
+        require(voteCommits[proposalId][msg.sender] == commitHash, "Invalid vote reveal");
+        voteReveals[proposalId][msg.sender] = support;
+        emit VoteRevealed(proposalId, msg.sender, support);
+    }
+
+    // Function to get the vote count
+    function getVoteCount(uint256 proposalId) public view returns (uint256 forVotes, uint256 againstVotes) {
+        require(block.timestamp >= proposalEndTimes[proposalId], "Votes have not been revealed yet");
+        forVotes = 0;
+        againstVotes = 0;
+        for (uint256 i = 0; i < voteReveals[proposalId].length; i++) {
+            if (voteReveals[proposalId][i]) {
+                forVotes++;
+            } else {
+                againstVotes++;
+            }
+        }
+    }
+    
 
    
 }
