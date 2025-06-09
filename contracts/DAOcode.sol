@@ -24,6 +24,14 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
        
     }
 
+    mapping (uint8 => mapping(address => bytes32)) voteCommits;
+    mapping (uint8 => mapping(address => bool)) voteReveals;
+    mapping( uint256 => address[]) votersListMap;
+    mapping(address => uint256) governorsSuccessfulvotes;
+    mapping(address => uint256) governorsFailedvotes;
+    mapping(address => uint8) governorsStreak;
+
+
     IgovernanceToken public governanceToken;
     IpaymentContract public paymentContract;
     
@@ -78,6 +86,7 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
         override(Governor, GovernorStorage)
         returns (uint256)
     {
+
         return super._propose(targets, values, calldatas, description, proposer);
     }
 
@@ -136,20 +145,27 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
         // This is a placeholder for actual DAO removal logic
         governanceToken.burnfrom(_memberAddress); // Burn the governance tokens of the member
     }   
+ // voting hashing function
 
  // Function to commit a vote
-    function commitVote(uint256 proposalId, bytes32 commitHash) public {
+    function commitVote(uint256 proposalId,bool support, uint256 salt) public {
         require(block.timestamp < proposalEndTimes[proposalId], "Voting period has ended");
+        bytes32 commitHash = keccak256(abi.encodePacked(support, salt));
         voteCommits[proposalId][msg.sender] = commitHash;
+
         emit VoteCommitted(proposalId, msg.sender, commitHash);
     }
 
     // Function to reveal a vote
     function revealVote(uint256 proposalId, bool support, uint256 salt) public {
+        address[] votersList;
+        votersList.push(msg.sender)
+        votersListMap[proposalId] = votersList;
         require(block.timestamp >= proposalEndTimes[proposalId], "Voting period has not ended");
         bytes32 commitHash = keccak256(abi.encodePacked(support, salt));
         require(voteCommits[proposalId][msg.sender] == commitHash, "Invalid vote reveal");
         voteReveals[proposalId][msg.sender] = support;
+
         emit VoteRevealed(proposalId, msg.sender, support);
     }
 
@@ -164,6 +180,30 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
             } else {
                 againstVotes++;
             }
+        }
+
+        if (forVotes > againstVotes) {
+            for(uint256 i= 0; i < votersListMap[proposalId].length; i++){
+                if(voteReveals[proposalId][votersListMap[proposalId][i]] = forVotes ){
+                    governorsSuccessfulvotes[votersListMap[proposalId][i]] += 1;
+                    governorsStreak[votersListMap[proposalId][i]] += 1;
+                }
+                else{
+                    governorsfailedvotes[votersListMap[proposalId][i]] += 1;
+                    governorsStreak[votersListMap[proposalId][i]] = 0;
+                }
+           }
+        } else {
+            for(uint256 i= 0; i < votersListMap[proposalId].length; i++){
+                if(voteReveals[proposalId][votersListMap[proposalId][i]] = forVotes ){
+                    governorsfailedvotes[votersListMap[proposalId][i]] += 1;
+                    governorsStreak[votersListMap[proposalId][i]] = 0;
+                }
+                else{
+                    governorssuccesfulvotes[votersListMap[proposalId][i]] += 1;
+                    governorsStreak[votersListMap[proposalId][i]] += 1;
+                }
+           }
         }
     }
     

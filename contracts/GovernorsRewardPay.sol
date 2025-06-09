@@ -5,7 +5,7 @@ contract RewardsPool {
     mapping(address => uint256) public rewards;
  
     constructor(address _daoAddress) {
-        require(daoAddress != address(0), "Invalid DAO address");
+        require(_daoAddress != address(0), "Invalid DAO address");
        
     }
 
