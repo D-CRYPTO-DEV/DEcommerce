@@ -205,6 +205,16 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
                 }
            }
         }
+
+        return (forVotes, againstVotes);
+    }
+
+
+    function getGovernorStats(address governor) public view returns (uint256 successfulVotes, uint256 failedVotes, uint8 streak) {
+        require(governor != address(0), "Invalid governor address");
+        successfulVotes = governorsSuccessfulvotes[governor];
+        failedVotes = governorsFailedvotes[governor];
+        streak = governorsStreak[governor];
     }
     
 
