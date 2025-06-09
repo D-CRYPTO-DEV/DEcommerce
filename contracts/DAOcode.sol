@@ -216,6 +216,51 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
         failedVotes = governorsFailedvotes[governor];
         streak = governorsStreak[governor];
     }
+
+    function castVote(uint256 proposalId, uint8 support) public override returns (uint256) {
+        return false;
+    }
+     function castVoteWithReason(
+        uint256 proposalId,
+        uint8 support,
+        string calldata reason
+    ) public override returns (uint256) {
+        return false;
+    }
+
+   
+    function castVoteWithReasonAndParams(
+        uint256 proposalId,
+        uint8 support,
+        string calldata reason,
+        bytes memory params
+    ) public virtual returns (uint256) {
+        
+        return false;
+    }
+
+   
+    function castVoteBySig(
+        uint256 proposalId,
+        uint8 support,
+        address voter,
+        bytes memory signature
+    ) public virtual returns (uint256) {
+      
+        return false;
+    }
+
+    
+    function castVoteWithReasonAndParamsBySig(
+        uint256 proposalId,
+        uint8 support,
+        address voter,
+        string calldata reason,
+        bytes memory params,
+        bytes memory signature
+    ) public virtual returns (uint256) {
+        return false;
+    }
     
 
    
