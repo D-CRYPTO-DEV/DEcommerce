@@ -13,7 +13,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 contract governanceToken is ERC20, ERC20Burnable, Ownable, ERC20Permit, ERC20Votes {
 
 
-   
+    
     constructor(address initialOwner)
         ERC20("GovernToken", "GT")
         Ownable(initialOwner)

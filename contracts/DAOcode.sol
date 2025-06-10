@@ -27,10 +27,15 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
     mapping (uint8 => mapping(address => bytes32)) voteCommits;
     mapping (uint8 => mapping(address => bool)) voteReveals;
     mapping( uint256 => address[]) votersListMap;
-    mapping(address => uint256) governorsSuccessfulvotes;
-    mapping(address => uint256) governorsFailedvotes;
-    mapping(address => uint8) governorsStreak;
+    mapping(address => uint256) governorSuccessfulvotes;
+    mapping(address => uint256) governorFailedvotes;
+    mapping(address => uint8) governorStreak;
     mapping(address => bool) committed;
+    mapping(uint256 => uint256) proposalStartTimes;
+    mapping(uint256 => uint256) proposalEndTimes;
+    mapping(address => uint256) governorsSuccessfulvotes;
+
+   
 
 
     IgovernanceToken public governanceToken;
@@ -40,7 +45,7 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
     event JoinedDAO(address DAOApplicant,address _DAOAddress);
     constructor(IVotes _token, TimelockController _timelock, address _governanceToken, address _paymentContract, _standardtransactionPower)
         Governor("MyGovernor")
-        GovernorSettings(4 hours, 1 weeks, 0)
+        GovernorSettings( 4 hours, 2 hours, 0)
         GovernorVotes(_token)
         GovernorVotesQuorumFraction(4)
         GovernorTimelockControl(_timelock)
@@ -150,7 +155,7 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
 
  // Function to commit a vote
     function commitVote(uint256 proposalId,bool support, uint256 salt) public {
-        require(block.timestamp < proposalEndTimes[proposalId], "Voting period has ended");
+        require(block.timestamp < _proposals[proposalId].voteStart, "Voting period has ended");
         bytes32 commitHash = keccak256(abi.encodePacked(support, salt));
         voteCommits[proposalId][msg.sender] = commitHash;
         committed[msg.sender] = true;
@@ -168,6 +173,7 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
         bytes32 commitHash = keccak256(abi.encodePacked(support, salt));
         require(voteCommits[proposalId][msg.sender] == commitHash, "Invalid vote reveal");
         voteReveals[proposalId][msg.sender] = support;
+        getVoteCount(proposalId);
 
         emit VoteRevealed(proposalId, msg.sender, support);
     }
@@ -188,7 +194,8 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
         if (forVotes > againstVotes) {
             for(uint256 i= 0; i < votersListMap[proposalId].length; i++){
                 if(voteReveals[proposalId][votersListMap[proposalId][i]] = forVotes ){
-                    governorsSuccessfulvotes[votersListMap[proposalId][i]] += 1;
+                    governorSuccessfulvotes[votersListMap[proposalId][i]] += 1;
+                    governorsSuccesfulvotes[address(this)] += 1;
                     governorsStreak[votersListMap[proposalId][i]] += 1;
                 }
                 else{
@@ -203,7 +210,8 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
                     governorsStreak[votersListMap[proposalId][i]] = 0;
                 }
                 else{
-                    governorssuccesfulvotes[votersListMap[proposalId][i]] += 1;
+                    governorSuccesfulvotes[votersListMap[proposalId][i]] += 1;
+                    governorsSuccesfulvotes[address(this)] += 1;
                     governorsStreak[votersListMap[proposalId][i]] += 1;
                 }
            }
@@ -222,7 +230,7 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
 
     function extraVotecheck(uint256 proposalId, bool support, uint256 salt) public view returns (bool) {
         require(committed[msg.sender], "You must commit your vote before casting it");
-        if (block.timestamp < proposalStartTimes[proposalId] || block.timestamp > proposalEndTimes[proposalId]) {
+        if (block.timestamp > _proposals[proposalId].voteStart && block.timestamp < proposalDeadline(uint256 proposalId)) {
             revert GovernorInvalidProposalState(proposalId);
         }
         bytes32 commitHash = keccak256(abi.encodePacked(support, salt));
@@ -293,6 +301,23 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
         committed[msg.sender] = false; // Reset the commit status after casting the vote
         emit VoteCast(voter, proposalId, support, reason);
     }
+
+     function governorSuccesfulvotes(address governor) external view returns (uint256) {
+        return governorsSuccessfulvotes[governor];
+    }
+
+    function governorfailedvotes(address governor) external view returns (uint256) {
+        return governorsFailedvotes[governor];
+    }
+
+    function governorStreak(address governor) external view returns (uint8) {
+        return governorsStreak[governor];
+    }
+    function governorsSuccesfulvotes() external view returns (uint256) {
+        return governorsSuccessfulvotes[address(this)];
+    }
+
+    
 
 
    
