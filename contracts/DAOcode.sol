@@ -30,6 +30,7 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
     mapping(address => uint256) governorsSuccessfulvotes;
     mapping(address => uint256) governorsFailedvotes;
     mapping(address => uint8) governorsStreak;
+    mapping(address => bool) committed;
 
 
     IgovernanceToken public governanceToken;
@@ -152,8 +153,10 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
         require(block.timestamp < proposalEndTimes[proposalId], "Voting period has ended");
         bytes32 commitHash = keccak256(abi.encodePacked(support, salt));
         voteCommits[proposalId][msg.sender] = commitHash;
-
+        committed[msg.sender] = true;
         emit VoteCommitted(proposalId, msg.sender, commitHash);
+
+        return commitHash;
     }
 
     // Function to reveal a vote
@@ -217,15 +220,37 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
         streak = governorsStreak[governor];
     }
 
-    function castVote(uint256 proposalId, uint8 support) public override returns (uint256) {
-        return false;
+    function extraVotecheck(uint256 proposalId, bool support, uint256 salt) public view returns (bool) {
+        require(committed[msg.sender], "You must commit your vote before casting it");
+        if (block.timestamp < proposalStartTimes[proposalId] || block.timestamp > proposalEndTimes[proposalId]) {
+            revert GovernorInvalidProposalState(proposalId);
+        }
+        bytes32 commitHash = keccak256(abi.encodePacked(support, salt));
+        require(voteCommits[proposalId][msg.sender] == commitHash, "committed vote does not match");
+        require(!voteReveals[proposalId][msg.sender], "Vote already revealed");
     }
-     function castVoteWithReason(
+
+    function castVote(uint256 proposalId, uint8 support,uint256 salt) public override returns (uint256) {
+        extraVotecheck(proposalId, support, salt);
+        // Cast the vote using the Governor contract's castVote function
+
+        Governor.castVote(proposalId, support);
+        committed[msg.sender] = false; // Reset the commit status after casting the vote
+        emit VoteCast(msg.sender, proposalId, support, "Vote cast successfully");
+    }
+
+   
+    function castVoteWithReason(
         uint256 proposalId,
         uint8 support,
-        string calldata reason
+        string calldata reason,
+        uint256 salt
     ) public override returns (uint256) {
-        return false;
+        extraVotecheck(proposalId, support, salt);
+        // Cast the vote using the Governor contract's castVoteWithReason function
+        Governor.castVoteWithReason(proposalId, support, reason);
+        committed[msg.sender] = false; // Reset the commit status after casting the vote
+        emit VoteCast(msg.sender, proposalId, support, reason);
     }
 
    
@@ -234,20 +259,24 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
         uint8 support,
         string calldata reason,
         bytes memory params
-    ) public virtual returns (uint256) {
-        
-        return false;
+    ) public override returns (uint256) {
+        extraVotecheck(proposalId, support, salt);
+        Governor.castVoteWithReasonAndParams(proposalId, support, reason, params);
+        committed[msg.sender] = false; // Reset the commit status after casting the vote
+        emit VoteCast(msg.sender, proposalId, support, reason);
     }
 
-   
+  
     function castVoteBySig(
         uint256 proposalId,
         uint8 support,
         address voter,
         bytes memory signature
-    ) public virtual returns (uint256) {
-      
-        return false;
+    ) public override returns (uint256) {
+        extraVotecheck(proposalId, support, salt);
+        Governor.castVoteBySig(proposalId, support, voter, signature);
+        committed[msg.sender] = false; // Reset the commit status after casting the vote
+        emit VoteCast(voter, proposalId, support, "Vote cast by signature");
     }
 
     
@@ -258,10 +287,13 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
         string calldata reason,
         bytes memory params,
         bytes memory signature
-    ) public virtual returns (uint256) {
-        return false;
+    ) public override returns (uint256) {
+        extraVotecheck(proposalId, support, salt);
+        Governor.castVoteWithReasonAndParamsBySig(proposalId, support, voter, reason, params, signature);
+        committed[msg.sender] = false; // Reset the commit status after casting the vote
+        emit VoteCast(voter, proposalId, support, reason);
     }
-    
+
 
    
 }
