@@ -29,7 +29,8 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
     mapping( uint256 => address[]) votersListMap;
     mapping(address => uint256) governorSuccessfulvotes;
     mapping(address => uint256) governorFailedvotes;
-    mapping(address => uint8) governorStreak;
+    mapping(address => uint8) governorStreakWin;
+    mapping(address => uint8) governorStreakLoss;
     mapping(address => bool) committed;
     mapping(uint256 => uint256) proposalStartTimes;
     mapping(uint256 => uint256) proposalEndTimes;
@@ -178,6 +179,27 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
         emit VoteRevealed(proposalId, msg.sender, support);
     }
 
+    function maxFailurestreak()
+    external
+    returns(bool result){
+        if( governorsStreakWLoss[msg.sender] >= 5){
+            bool result = true;
+        }else{
+            bool result = false;
+        }
+    }
+
+    function letItBurn()
+    public
+    returns(bool burnt){
+        if(maxFailurestreak()){
+            governanceToken.burnfrom(msg.sender);
+            bool burnt = true;
+        }
+     bool burnt = false;
+
+    }
+
     // Function to get the vote count
     function getVoteCount(uint256 proposalId) public view returns (uint256 forVotes, uint256 againstVotes) {
         require(block.timestamp >= proposalEndTimes[proposalId], "Votes have not been revealed yet");
@@ -196,23 +218,27 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
                 if(voteReveals[proposalId][votersListMap[proposalId][i]] = forVotes ){
                     governorSuccessfulvotes[votersListMap[proposalId][i]] += 1;
                     governorsSuccesfulvotes[address(this)] += 1;
-                    governorsStreak[votersListMap[proposalId][i]] += 1;
+                    governorsStreakWin[votersListMap[proposalId][i]] += 1;
+                    governorsStreakWLoss[votersListMap[proposalId][i]] = 0;
                 }
                 else{
                     governorsfailedvotes[votersListMap[proposalId][i]] += 1;
                     governorsStreak[votersListMap[proposalId][i]] = 0;
+                    governorsStreakWLoss[votersListMap[proposalId][i]] += 1;
                 }
            }
         } else {
             for(uint256 i= 0; i < votersListMap[proposalId].length; i++){
                 if(voteReveals[proposalId][votersListMap[proposalId][i]] = forVotes ){
                     governorsfailedvotes[votersListMap[proposalId][i]] += 1;
+                    governorsStreakLoss[votersListMap[proposalId][i]] += 1;
                     governorsStreak[votersListMap[proposalId][i]] = 0;
                 }
                 else{
                     governorSuccesfulvotes[votersListMap[proposalId][i]] += 1;
                     governorsSuccesfulvotes[address(this)] += 1;
-                    governorsStreak[votersListMap[proposalId][i]] += 1;
+                    governorsStreakWin[votersListMap[proposalId][i]] += 1;
+                    governorsStreakLoss[votersListMap[proposalId][i]] = 0;
                 }
            }
         }
@@ -258,6 +284,7 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
         // Cast the vote using the Governor contract's castVoteWithReason function
         Governor.castVoteWithReason(proposalId, support, reason);
         committed[msg.sender] = false; // Reset the commit status after casting the vote
+        letItBurn();
         emit VoteCast(msg.sender, proposalId, support, reason);
     }
 
