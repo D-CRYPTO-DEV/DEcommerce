@@ -5,6 +5,7 @@ contract paymentContract {
     address payable public immutable DAOADDRESS;
     mapping(address => mapping(address => uint256)) public PaymentsTOContract;
     mapping(address => uint256) public PaymentsToDAO;
+    mapping(string => address) public CouriersAddress;
 
     event paymentSucess(address indexed sender, string message);
     event DAOnotification(address indexed sender, string message);
@@ -33,6 +34,7 @@ contract paymentContract {
        
     }
 
+  
     function getPaymentToDAO(address _useradd) public view returns (uint256) {
         uint256 result = PaymentsToDAO[_useradd];
         return result;
@@ -54,7 +56,7 @@ contract paymentContract {
         return _user.balance;
 
     }
-     function reportTransactionPetition(address _sellerAdresss, string memory) public {
+     function reportTransactionPetition(address _sellerAdresss, string memory message) public {
         require(PaymentsTOContract[msg.sender][_sellerAdresss] > 0, "No payment made to this seller");
         DAOADDRESS.transfer(PaymentsTOContract[msg.sender][_sellerAdresss]);
         //a message to notify the seller of the transaction petition

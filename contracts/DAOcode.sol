@@ -12,7 +12,6 @@ import {GovernorVotesQuorumFraction} from "@openzeppelin/contracts/governance/ex
 import {IVotes} from "@openzeppelin/contracts/governance/utils/IVotes.sol";
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 
-contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, GovernorStorage, GovernorVotes, GovernorVotesQuorumFraction, GovernorTimelockControl {
     interface IgovernanceToken {
         function mint(address to, uint256 amount) external;
         function burnfrom(address _useradd) external;
@@ -24,6 +23,9 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
        
     }
 
+contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, GovernorStorage, GovernorVotes, GovernorVotesQuorumFraction, GovernorTimelockControl {
+   
+   
     mapping (uint8 => mapping(address => bytes32)) voteCommits;
     mapping (uint8 => mapping(address => bool)) voteReveals;
     mapping( uint256 => address[]) votersListMap;
@@ -44,7 +46,9 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
     
     uint256 public standardtransactionPower;
     event JoinedDAO(address DAOApplicant,address _DAOAddress);
-    constructor(IVotes _token, TimelockController _timelock, address _governanceToken, address _paymentContract, _standardtransactionPower)
+    event VoteCommitted(uint256, address, bytes32);
+    event VoteRevealed(uint256, address, bool);
+    constructor(IVotes _token, TimelockController _timelock, address _governanceToken, address _paymentContract, uint256 _standardtransactionPower)
         Governor("MyGovernor")
         GovernorSettings( 4 hours, 2 hours, 0)
         GovernorVotes(_token)
@@ -60,7 +64,13 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
     }
 
     // The following functions are overrides required by Solidity.
+     function votingDelay() public pure virtual override returns (uint256) {
+        return 4 hours;
+    }
 
+    function votingPeriod() public pure virtual override returns (uint256) {
+        return 2 hours;
+    }
     function state(uint256 proposalId)
         public
         view
@@ -129,7 +139,7 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
         return super._executor();
     }
 
-    function standardtransactionPower(uint256 _standardtransactionPower)
+    function setStandardTransactionPower(uint256 _standardtransactionPower)
         internal   
     {
         standardtransactionPower = _standardtransactionPower;
@@ -156,7 +166,9 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
 
  // Function to commit a vote
     function commitVote(uint256 proposalId,bool support, uint256 salt) public {
-        require(block.timestamp < _proposals[proposalId].voteStart, "Voting period has ended");
+        
+        require(!committed[msg.sender], "You have already committed a vote");
+        require(block.timestamp < votingDelay() , "Voting period has ended");
         bytes32 commitHash = keccak256(abi.encodePacked(support, salt));
         voteCommits[proposalId][msg.sender] = commitHash;
         committed[msg.sender] = true;
@@ -168,7 +180,7 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
     // Function to reveal a vote
     function revealVote(uint256 proposalId, bool support, uint256 salt) public {
         address[] votersList;
-        votersList.push(msg.sender)
+        votersList.push(msg.sender);
         votersListMap[proposalId] = votersList;
         require(block.timestamp >= proposalEndTimes[proposalId], "Voting period has not ended");
         bytes32 commitHash = keccak256(abi.encodePacked(support, salt));
@@ -179,30 +191,20 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
         emit VoteRevealed(proposalId, msg.sender, support);
     }
 
-    function maxFailurestreak()
+
+  function maxFailurestreak()
     external
     returns(bool result){
-        if( governorsStreakWLoss[msg.sender] >= 5){
+        if( governorStreakWLoss[msg.sender] >= 5){
             bool result = true;
         }else{
             bool result = false;
         }
     }
-
-    function letItBurn()
-    public
-    returns(bool burnt){
-        if(maxFailurestreak()){
-            governanceToken.burnfrom(msg.sender);
-            bool burnt = true;
-        }
-     bool burnt = false;
-
-    }
-
+   
     // Function to get the vote count
-    function getVoteCount(uint256 proposalId) public view returns (uint256 forVotes, uint256 againstVotes) {
-        require(block.timestamp >= proposalEndTimes[proposalId], "Votes have not been revealed yet");
+    function getVoteCountn(uint256 proposalId) public view returns (uint256 forVotes, uint256 againstVotes) {
+        require(block.timestamp >= proposalEndTimes, "Votes have not been revealed yet");
         forVotes = 0;
         againstVotes = 0;
         for (uint256 i = 0; i < voteReveals[proposalId].length; i++) {
@@ -217,22 +219,22 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
             for(uint256 i= 0; i < votersListMap[proposalId].length; i++){
                 if(voteReveals[proposalId][votersListMap[proposalId][i]] = forVotes ){
                     governorSuccessfulvotes[votersListMap[proposalId][i]] += 1;
-                    governorsSuccesfulvotes[address(this)] += 1;
-                    governorsStreakWin[votersListMap[proposalId][i]] += 1;
-                    governorsStreakWLoss[votersListMap[proposalId][i]] = 0;
+                    governorsSuccessfulvotes[address(this)] += 1;
+                    governorStreakWin[votersListMap[proposalId][i]] += 1;
+                    governorStreakLoss[votersListMap[proposalId][i]] = 0;
                 }
                 else{
-                    governorsfailedvotes[votersListMap[proposalId][i]] += 1;
-                    governorsStreak[votersListMap[proposalId][i]] = 0;
-                    governorsStreakWLoss[votersListMap[proposalId][i]] += 1;
+                    governorFailedvotes[votersListMap[proposalId][i]] += 1;
+                    governorStreakWin[votersListMap[proposalId][i]] = 0;
+                    governorStreakLoss[votersListMap[proposalId][i]] += 1;
                 }
            }
         } else {
             for(uint256 i= 0; i < votersListMap[proposalId].length; i++){
                 if(voteReveals[proposalId][votersListMap[proposalId][i]] = forVotes ){
-                    governorsfailedvotes[votersListMap[proposalId][i]] += 1;
-                    governorsStreakLoss[votersListMap[proposalId][i]] += 1;
-                    governorsStreak[votersListMap[proposalId][i]] = 0;
+                    governorFailedvotes[votersListMap[proposalId][i]] += 1;
+                    governorStreakLoss[votersListMap[proposalId][i]] += 1;
+                    governorStreakWin[votersListMap[proposalId][i]] = 0;
                 }
                 else{
                     governorSuccesfulvotes[votersListMap[proposalId][i]] += 1;
@@ -255,10 +257,12 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
     }
 
     function extraVotecheck(uint256 proposalId, bool support, uint256 salt) public view returns (bool) {
-        require(committed[msg.sender], "You must commit your vote before casting it");
-        if (block.timestamp > _proposals[proposalId].voteStart && block.timestamp < proposalDeadline(uint256 proposalId)) {
-            revert GovernorInvalidProposalState(proposalId);
+         if(maxFailurestreak()){
+            governanceToken.burnfrom(msg.sender);
+           
         }
+        require(committed[msg.sender], "You must commit your vote before casting it");
+        require(block.timestamp > _proposals[proposalId].voteStart && block.timestamp < proposalDeadline(proposalId),"Voting period is not active");
         bytes32 commitHash = keccak256(abi.encodePacked(support, salt));
         require(voteCommits[proposalId][msg.sender] == commitHash, "committed vote does not match");
         require(!voteReveals[proposalId][msg.sender], "Vote already revealed");
@@ -284,14 +288,14 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
         // Cast the vote using the Governor contract's castVoteWithReason function
         Governor.castVoteWithReason(proposalId, support, reason);
         committed[msg.sender] = false; // Reset the commit status after casting the vote
-        letItBurn();
         emit VoteCast(msg.sender, proposalId, support, reason);
     }
 
    
     function castVoteWithReasonAndParams(
         uint256 proposalId,
-        uint8 support,
+        bool support,
+        uint256 salt,
         string calldata reason,
         bytes memory params
     ) public override returns (uint256) {
@@ -305,6 +309,7 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
     function castVoteBySig(
         uint256 proposalId,
         uint8 support,
+        uint256 salt,
         address voter,
         bytes memory signature
     ) public override returns (uint256) {
@@ -318,6 +323,7 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
     function castVoteWithReasonAndParamsBySig(
         uint256 proposalId,
         uint8 support,
+        uint256 salt,
         address voter,
         string calldata reason,
         bytes memory params,
@@ -334,18 +340,28 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
     }
 
     function governorfailedvotes(address governor) external view returns (uint256) {
-        return governorsFailedvotes[governor];
+        return governorFailedvotes[governor];
     }
 
     function governorStreak(address governor) external view returns (uint8) {
-        return governorsStreak[governor];
+        return governorsStreakWin[governor];
     }
     function governorsSuccesfulvotes() external view returns (uint256) {
         return governorsSuccessfulvotes[address(this)];
     }
 
     
+    function maxFailurestreak()
+    external
+    returns(bool result){
+        if( governorStreakLoss[msg.sender] >= 5){
+            bool result = true;
+        }else{
+            bool result = false;
+        }
+    }
 
+   
 
    
 }
