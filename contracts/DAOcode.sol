@@ -15,9 +15,9 @@ import {TimelockController} from "@openzeppelin/contracts/governance/TimelockCon
     interface IgovernanceToken {
         function mint(address to, uint256 amount) external;
         function burnfrom(address _useradd) external;
+        function balanceOf(address account) external view  returns (uint256);
         
     }
-
     interface IpaymentContract {
         function getPaymentToDAO(address _useradd) external view returns (uint256);
        
@@ -26,16 +26,15 @@ import {TimelockController} from "@openzeppelin/contracts/governance/TimelockCon
 contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, GovernorStorage, GovernorVotes, GovernorVotesQuorumFraction, GovernorTimelockControl {
    
    
-    mapping (uint8 => mapping(address => bytes32)) voteCommits;
-    mapping (uint8 => mapping(address => bool)) voteReveals;
+    mapping (uint256 => mapping(address => bytes32)) voteCommits;
+    mapping (uint256 => mapping(address => uint8)) voteReveals;
     mapping( uint256 => address[]) votersListMap;
     mapping(address => uint256) governorSuccessfulvotes;
     mapping(address => uint256) governorFailedvotes;
     mapping(address => uint8) governorStreakWin;
     mapping(address => uint8) governorStreakLoss;
     mapping(address => bool) committed;
-    mapping(uint256 => uint256) proposalStartTimes;
-    mapping(uint256 => uint256) proposalEndTimes;
+   
     mapping(address => uint256) governorsSuccessfulvotes;
 
    
@@ -45,9 +44,13 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
     IpaymentContract public paymentContract;
     
     uint256 public standardtransactionPower;
+    uint256 proposalStartTimes;
+    uint256 proposalEndTimes;
+      address[] votersList;
+     uint256 public totalVoteTime = votingDelay() + votingPeriod();
     event JoinedDAO(address DAOApplicant,address _DAOAddress);
     event VoteCommitted(uint256, address, bytes32);
-    event VoteRevealed(uint256, address, bool);
+    event VoteRevealed(uint256, address, uint8);
     constructor(IVotes _token, TimelockController _timelock, address _governanceToken, address _paymentContract, uint256 _standardtransactionPower)
         Governor("MyGovernor")
         GovernorSettings( 4 hours, 2 hours, 0)
@@ -64,11 +67,11 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
     }
 
     // The following functions are overrides required by Solidity.
-     function votingDelay() public pure virtual override returns (uint256) {
+     function votingDelayed() public pure  returns (uint256) {
         return 4 hours;
     }
 
-    function votingPeriod() public pure virtual override returns (uint256) {
+    function votingPeriods() public pure  returns (uint256) {
         return 2 hours;
     }
     function state(uint256 proposalId)
@@ -165,50 +168,33 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
  // voting hashing function
 
  // Function to commit a vote
-    function commitVote(uint256 proposalId,bool support, uint256 salt) public {
-        
-        require(!committed[msg.sender], "You have already committed a vote");
-        require(block.timestamp < votingDelay() , "Voting period has ended");
-        bytes32 commitHash = keccak256(abi.encodePacked(support, salt));
-        voteCommits[proposalId][msg.sender] = commitHash;
-        committed[msg.sender] = true;
-        emit VoteCommitted(proposalId, msg.sender, commitHash);
-
-        return commitHash;
-    }
-
+    
     // Function to reveal a vote
-    function revealVote(uint256 proposalId, bool support, uint256 salt) public {
-        address[] votersList;
+    function revealVote(uint256 proposalId, uint8 support, uint256 salt) public {
+      
         votersList.push(msg.sender);
         votersListMap[proposalId] = votersList;
-        require(block.timestamp >= proposalEndTimes[proposalId], "Voting period has not ended");
+        require(block.timestamp >= votingDelay() + votingPeriods(), "Voting period has not ended");
         bytes32 commitHash = keccak256(abi.encodePacked(support, salt));
         require(voteCommits[proposalId][msg.sender] == commitHash, "Invalid vote reveal");
         voteReveals[proposalId][msg.sender] = support;
-        getVoteCount(proposalId);
+        getVoteCountn(proposalId);
 
         emit VoteRevealed(proposalId, msg.sender, support);
     }
 
 
-  function maxFailurestreak()
-    external
-    returns(bool result){
-        if( governorStreakWLoss[msg.sender] >= 5){
-            bool result = true;
-        }else{
-            bool result = false;
-        }
-    }
+  
+      
    
     // Function to get the vote count
-    function getVoteCountn(uint256 proposalId) public view returns (uint256 forVotes, uint256 againstVotes) {
-        require(block.timestamp >= proposalEndTimes, "Votes have not been revealed yet");
+    function getVoteCountn(uint256 proposalId) public  returns (uint256 forVotes, uint256 againstVotes) {
+        require(block.timestamp >= votingDelayed() + votingPeriod(), "Votes have not been revealed yet");
+        // where forVotes represents true and againstVotes represents false
         forVotes = 0;
         againstVotes = 0;
-        for (uint256 i = 0; i < voteReveals[proposalId].length; i++) {
-            if (voteReveals[proposalId][i]) {
+        for (uint256 i = 0; i < votersListMap[proposalId].length; i++) {
+            if (voteReveals[proposalId][votersListMap[proposalId][i]] == 1) {
                 forVotes++;
             } else {
                 againstVotes++;
@@ -217,7 +203,7 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
 
         if (forVotes > againstVotes) {
             for(uint256 i= 0; i < votersListMap[proposalId].length; i++){
-                if(voteReveals[proposalId][votersListMap[proposalId][i]] = forVotes ){
+                if(voteReveals[proposalId][votersListMap[proposalId][i]] == 1 ){
                     governorSuccessfulvotes[votersListMap[proposalId][i]] += 1;
                     governorsSuccessfulvotes[address(this)] += 1;
                     governorStreakWin[votersListMap[proposalId][i]] += 1;
@@ -231,16 +217,16 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
            }
         } else {
             for(uint256 i= 0; i < votersListMap[proposalId].length; i++){
-                if(voteReveals[proposalId][votersListMap[proposalId][i]] = forVotes ){
+                if(voteReveals[proposalId][votersListMap[proposalId][i]] == 1 ){
                     governorFailedvotes[votersListMap[proposalId][i]] += 1;
                     governorStreakLoss[votersListMap[proposalId][i]] += 1;
                     governorStreakWin[votersListMap[proposalId][i]] = 0;
                 }
                 else{
-                    governorSuccesfulvotes[votersListMap[proposalId][i]] += 1;
-                    governorsSuccesfulvotes[address(this)] += 1;
-                    governorsStreakWin[votersListMap[proposalId][i]] += 1;
-                    governorsStreakLoss[votersListMap[proposalId][i]] = 0;
+                    governorSuccessfulvotes[votersListMap[proposalId][i]] += 1;
+                    governorsSuccessfulvotes[address(this)] += 1;
+                    governorStreakWin[votersListMap[proposalId][i]] += 1;
+                    governorStreakLoss[votersListMap[proposalId][i]] = 0;
                 }
            }
         }
@@ -251,30 +237,57 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
 
     function getGovernorStats(address governor) public view returns (uint256 successfulVotes, uint256 failedVotes, uint8 streak) {
         require(governor != address(0), "Invalid governor address");
-        successfulVotes = governorsSuccessfulvotes[governor];
-        failedVotes = governorsFailedvotes[governor];
-        streak = governorsStreak[governor];
+        successfulVotes = governorSuccessfulvotes[governor];
+        failedVotes = governorFailedvotes[governor];
+        streak = governorStreakWin[governor];
     }
 
-    function extraVotecheck(uint256 proposalId, bool support, uint256 salt) public view returns (bool) {
+    function maxFailurestreak()
+    public
+    view
+    returns (bool) {
+        if (governorStreakLoss[msg.sender] >= 5) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+   
+
+    function commitVote(uint256 proposalId,bool support, uint256 salt) public returns(bytes32) {
+          if(maxFailurestreak()){
+            governanceToken.burnfrom(msg.sender);
+           
+        }
+        require(!committed[msg.sender], "You have already committed a vote");
+        require(block.timestamp < votingDelay() , "Voting period has ended");
+        bytes32 commitHash = keccak256(abi.encodePacked(support, salt));
+        voteCommits[proposalId][msg.sender] = commitHash;
+        committed[msg.sender] = true;
+        emit VoteCommitted(proposalId, msg.sender, commitHash);
+
+        return commitHash;
+    }
+    function extraVotecheck(uint256 proposalId, uint8 support, uint256 salt) public  returns (bool) {
          if(maxFailurestreak()){
             governanceToken.burnfrom(msg.sender);
            
         }
         require(committed[msg.sender], "You must commit your vote before casting it");
-        require(block.timestamp > _proposals[proposalId].voteStart && block.timestamp < proposalDeadline(proposalId),"Voting period is not active");
+        require(block.timestamp > votingDelay() && block.timestamp < votingDelay() + votingPeriod(), "Voting period is not active");
         bytes32 commitHash = keccak256(abi.encodePacked(support, salt));
         require(voteCommits[proposalId][msg.sender] == commitHash, "committed vote does not match");
-        require(!voteReveals[proposalId][msg.sender], "Vote already revealed");
+        require(voteReveals[proposalId][msg.sender] == 0, "Vote already revealed");
     }
 
-    function castVote(uint256 proposalId, uint8 support,uint256 salt) public override returns (uint256) {
+    function castVote(uint256 proposalId, uint8 support,uint256 salt) public returns (uint256) {
         extraVotecheck(proposalId, support, salt);
         // Cast the vote using the Governor contract's castVote function
 
         Governor.castVote(proposalId, support);
         committed[msg.sender] = false; // Reset the commit status after casting the vote
-        emit VoteCast(msg.sender, proposalId, support, "Vote cast successfully");
+        emit VoteCast(msg.sender, proposalId, support, 1 , "Vote cast successfully");
     }
 
    
@@ -283,40 +296,41 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
         uint8 support,
         string calldata reason,
         uint256 salt
-    ) public override returns (uint256) {
+    ) public returns (uint256) {
         extraVotecheck(proposalId, support, salt);
         // Cast the vote using the Governor contract's castVoteWithReason function
-        Governor.castVoteWithReason(proposalId, support, reason);
+        emit VoteCast(msg.sender, proposalId, support, 1, reason);
         committed[msg.sender] = false; // Reset the commit status after casting the vote
-        emit VoteCast(msg.sender, proposalId, support, reason);
+        return Governor.castVoteWithReason(proposalId, support, reason);
+        
     }
 
    
     function castVoteWithReasonAndParams(
         uint256 proposalId,
-        bool support,
+        uint8 support,
         uint256 salt,
         string calldata reason,
         bytes memory params
-    ) public override returns (uint256) {
+    ) public returns (uint256) {
         extraVotecheck(proposalId, support, salt);
         Governor.castVoteWithReasonAndParams(proposalId, support, reason, params);
         committed[msg.sender] = false; // Reset the commit status after casting the vote
-        emit VoteCast(msg.sender, proposalId, support, reason);
+        emit VoteCast(msg.sender, proposalId, support, 1, reason);
     }
-
+                                                                                                                                   
   
     function castVoteBySig(
-        uint256 proposalId,
+        uint256 proposalId,              
         uint8 support,
         uint256 salt,
         address voter,
         bytes memory signature
-    ) public override returns (uint256) {
+    ) public returns (uint256) {
         extraVotecheck(proposalId, support, salt);
         Governor.castVoteBySig(proposalId, support, voter, signature);
         committed[msg.sender] = false; // Reset the commit status after casting the vote
-        emit VoteCast(voter, proposalId, support, "Vote cast by signature");
+        emit VoteCast(voter, proposalId, support, 1, "Vote cast by signature");
     }
 
     
@@ -328,11 +342,11 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
         string calldata reason,
         bytes memory params,
         bytes memory signature
-    ) public override returns (uint256) {
+    ) public returns (uint256) {
         extraVotecheck(proposalId, support, salt);
         Governor.castVoteWithReasonAndParamsBySig(proposalId, support, voter, reason, params, signature);
         committed[msg.sender] = false; // Reset the commit status after casting the vote
-        emit VoteCast(voter, proposalId, support, reason);
+        emit VoteCast(voter, proposalId, support, 1, reason);
     }
 
      function governorSuccesfulvotes(address governor) external view returns (uint256) {
@@ -344,22 +358,14 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
     }
 
     function governorStreak(address governor) external view returns (uint8) {
-        return governorsStreakWin[governor];
+        return governorStreakWin[governor];
     }
     function governorsSuccesfulvotes() external view returns (uint256) {
         return governorsSuccessfulvotes[address(this)];
     }
 
     
-    function maxFailurestreak()
-    external
-    returns(bool result){
-        if( governorStreakLoss[msg.sender] >= 5){
-            bool result = true;
-        }else{
-            bool result = false;
-        }
-    }
+  
 
    
 

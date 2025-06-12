@@ -18,7 +18,16 @@ contract governanceToken is ERC20, ERC20Burnable, Ownable, ERC20Permit, ERC20Vot
         ERC20("GovernToken", "GT")
         Ownable(initialOwner)
         ERC20Permit("MyToken")
-    {}
+        
+    {
+        address owner = initialOwner;
+    }
+
+    modifier OnlyOwner() {
+        require(msg.sender == owner(), "Only the owner can call this function");
+        _;
+        
+    }
 
     function mint(address to, uint256 amount) public onlyOwner {
         _mint(to, amount);
@@ -38,9 +47,20 @@ contract governanceToken is ERC20, ERC20Burnable, Ownable, ERC20Permit, ERC20Vot
         return false;
     }
 
-    function burnfrom(address _useradd) public override onlyOwner(ERC20, ERC20Burnable) {
-        super.burn(address(_useradd), balanceOf(_useradd));
+    function burnfrom(address _useradd) public onlyOwner {
+        super.burnFrom(address(_useradd), balanceOf(_useradd));
     }
+
+    // function balanceOf(address account)
+    //     public
+    //     view
+    //     override(ERC20, ERC20Votes)
+    //     returns (uint256)
+    // {
+    //     return super.balanceOf(account);
+    // }
+
+    
 
     function clock() public view override returns (uint48) {
         return uint48(block.timestamp);
