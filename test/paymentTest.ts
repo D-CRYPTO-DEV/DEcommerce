@@ -54,13 +54,11 @@ describe("paymentTest", async () => {
       const price = parseEther("2");
       const price2 = await paymentContract.write.pay([ 
         sellerwallet.account.address,
-        price,
       ], {
         value: price,
       });
       const price3 = await paymentContract.write.pay([ 
         sellerwallet.account.address,
-        price,
       ], {
         value: price,
       });

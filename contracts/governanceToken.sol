@@ -11,8 +11,8 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 
 contract governanceToken is ERC20, ERC20Burnable, Ownable, ERC20Permit, ERC20Votes {
-
-
+    address immutable public  ownerAccount;
+    
     
     constructor(address initialOwner)
         ERC20("GovernToken", "GT")
@@ -20,13 +20,6 @@ contract governanceToken is ERC20, ERC20Burnable, Ownable, ERC20Permit, ERC20Vot
         ERC20Permit("MyToken")
         
     {
-        address owner = initialOwner;
-    }
-
-    modifier OnlyOwner() {
-        require(msg.sender == owner(), "Only the owner can call this function");
-        _;
-        
     }
 
     function mint(address to, uint256 amount) public onlyOwner {
@@ -46,16 +39,13 @@ contract governanceToken is ERC20, ERC20Burnable, Ownable, ERC20Permit, ERC20Vot
     function approve(address spender, uint256 amount) public override returns (bool) {
         return false;
     }
-
-    function burnfrom(address _useradd) public onlyOwner {
-        super.burnFrom(address(_useradd), balanceOf(_useradd));
-    }
+    
 
     // function balanceOf(address account)
     //     public
-    //     view
-    //     override(ERC20, ERC20Votes)
-    //     returns (uint256)
+    function burnfrom(address _useradd) public onlyOwner {
+        super.burnFrom(_useradd, balanceOf(_useradd));
+    }
     // {
     //     return super.balanceOf(account);
     // }
