@@ -50,7 +50,7 @@ describe("paymentTest", async () => {
     });
     
     it("set paymentamount to the amount to be paid ", async () => {
-      const { publicClient, paymentContract, deployer, sellerwallet, otherAccount } = await loadFixture(deployContract);
+      const { publicClient, paymentContract, deployer,buyer, sellerwallet, otherAccount } = await loadFixture(deployContract);
       const price = parseEther("2");
       const price2 = await paymentContract.write.pay([ 
         sellerwallet.account.address,
@@ -62,16 +62,24 @@ describe("paymentTest", async () => {
       ], {
         value: price,
       });
+       const price4 = await paymentContract.write.pay([ 
+        sellerwallet.account.address,
+      ], {
+        value: price,
+      });
+     
       const ContractADD = paymentContract.address
       console.log(price2)
       console.log( await publicClient.getBalance({
         address: ContractADD,
       }));
-      expect(await paymentContract.read.getPayment([sellerwallet.account.address])).to.equal(price);
+      const DAOpay = await paymentContract.read.getPayment( [sellerwallet.account.address, otherAccount.account.address]);
+      console.log(DAOpay);
+      expect(DAOpay).to.equal(price * 3n);
       
 
     });
-    it("set the balance of deployer to 1000 token", async () => {
+    it("check to see if you can send tokens to ", async () => {
      
     });
      

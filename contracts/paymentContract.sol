@@ -62,8 +62,13 @@ contract paymentContract {
     }
 
   
-    function getPaymentToDAO(address _useradd) public view returns (uint256) {
-        uint256 result = PaymentsToDAO[_useradd];
+    function getPaymentToDAO(address _buyer) public view returns (uint256) {
+        uint256 result = PaymentsToDAO[_buyer];
+        return result;
+    }
+
+    function getPayment(address _sellerAdresss, address _buyer) public view returns (uint256) {
+        uint256 result = PaymentsTOContract[_buyer][_sellerAdresss];
         return result;
     }
 
@@ -79,10 +84,7 @@ contract paymentContract {
         emit paymentSucess(msg.sender, "Order cancelled and funds returned to buyer");
     }
 
-    function getPayment(address _sellerAdresss) public view returns (uint256) {
-        uint256 result = PaymentsTOContract[msg.sender][_sellerAdresss];
-        return result;
-    }
+  
 
     function acknowledgeGoodsReceiption(address _sellerAdresss) public {
         address payable seller = payable(_sellerAdresss);
