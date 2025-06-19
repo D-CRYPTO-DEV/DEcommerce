@@ -21,8 +21,10 @@ contract paymentContract {
     mapping(string => address) public CouriersAddress;
     
 
-    event paymentSucess(address indexed sender, string message);
+    event paymentSucess(address indexed  sender, uint256 indexed transactionId, string  message);
     event DAOnotification(address indexed sender, string message);
+    event  calcelationSuccess(address indexed sender, string message);
+    event paymentCompleted(address indexed sender, string message);
     constructor(address _DAOADDRESS) {
         require(_DAOADDRESS != address(0), "Invalid DAO address");
         DAOADDRESS = payable(_DAOADDRESS);
@@ -49,14 +51,14 @@ contract paymentContract {
             amount: msg.value,
             message: "Payment made successfully",
             isCompleted: false,
-            cancelOrderTimeLimited: block.timestamp + 4 hours // 24 hours to cancel the order
+            cancelOrderTimeLimited: block.timestamp + 60 seconds // 24 hours to cancel the order
         });
         require(_sellerAdresss != address(0), "Invalid seller address");
         require(msg.sender != _sellerAdresss, "Buyer cannot be the seller");
         payable(address(this)).transfer(msg.value);
         PaymentsToDAO[msg.sender] += msg.value;
         PaymentsTOContract[msg.sender][_sellerAdresss] += msg.value;
-        emit paymentSucess(msg.sender, "Payment registration sucessful");
+        emit paymentSucess(msg.sender, transactionId, "Payment registration sucessful");
         return "Payment registration successful";
        
     }
@@ -76,12 +78,13 @@ contract paymentContract {
         address sellerAdresss = transactionRecords[_transactionID].seller;
         address buyer = transactionRecords[_transactionID].buyer;
         require(block.timestamp < transactionRecords[_transactionID].cancelOrderTimeLimited, "Order cancellation time limit exceeded");
-        require(msg.sender == sellerAdresss || msg.sender == buyer, "Only the buyer can cancel the order");
+        require(msg.sender == sellerAdresss || msg.sender == buyer, "Only the buyer or seller can cancel the order");
         require(PaymentsTOContract[msg.sender][sellerAdresss] > 0, "No payment made to this seller");
         uint256 amount = PaymentsTOContract[buyer][sellerAdresss];
+        PaymentsToDAO[buyer] -= amount;
         PaymentsTOContract[buyer][sellerAdresss] = 0;
         payable(buyer).transfer(amount);
-        emit paymentSucess(msg.sender, "Order cancelled and funds returned to buyer");
+        emit calcelationSuccess(msg.sender, "Order cancelled and funds returned to buyer");
     }
 
   
@@ -91,7 +94,7 @@ contract paymentContract {
         require(PaymentsTOContract[msg.sender][_sellerAdresss] > 0, "No payment made to this seller");
         seller.transfer(PaymentsTOContract[msg.sender][_sellerAdresss]);
         PaymentsTOContract[msg.sender][_sellerAdresss] = 0;
-        emit paymentSucess(msg.sender, "goods receiption  acknowledged and funds transferred to seller");
+        emit paymentCompleted(msg.sender, "goods receiption  acknowledged and funds transferred to seller");
     }
 
     function balanceOf(address _user) public view returns (uint256) {
