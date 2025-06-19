@@ -149,8 +149,8 @@ const transactionId = logs[0].args.transactionId;
 
   describe("cannot cancel a transaction after the time limit is exceeded", async () => {
     
-    it("try canceling a transaction after the 1 min time limit", async () => {
-      const { publicClient, paymentContract, deployer,buyer, sellerwallet, otherAccount } = await loadFixture(deployContract);
+    it("try canceling a transaction after the 1 min time limit", async (done) => {
+    const { publicClient, paymentContract, deployer,buyer, sellerwallet, otherAccount } = await loadFixture(deployContract);
     const price = parseEther("2");
     const paidTxHash = await paymentContract.write.pay([ 
       sellerwallet.account.address,
@@ -194,6 +194,7 @@ const transactionId = logs[0].args.transactionId;
       console.error("Cancellation after time limit exceeded:", error);
       expect(error).to.exist; // Ensure that an error is thrown
     }
+    done();
      
      
     });
@@ -265,6 +266,10 @@ const transactionId = logs[0].args.transactionId;
 
 
 
+
+function done() {
+  throw new Error("Function not implemented.");
+}
   /**
  * Writes a contract and gets event logs.
  * @returns {Promise<Array>} An array containing the logs and decoded event logs.
