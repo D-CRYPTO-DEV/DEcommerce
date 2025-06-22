@@ -50,7 +50,6 @@ describe("paymentTest", async () => {
       expect(await paymentContract.read.getPayment([sellerwallet.account.address, otherAccount.account.address])).to.equal(0n);
       // Add your test logic here, for example:
       // expect(await paymentContract.getVotesForAllProposals()).to.deep.equal([0, 0, 0]);
-    });
     
     it("set paymentamount to the amount to be paid ", async () => {
       const { publicClient, paymentContract, deployer,buyer, sellerwallet, otherAccount } = await loadFixture(deployContract);
@@ -82,13 +81,18 @@ describe("paymentTest", async () => {
       
 
     });
-    it("check to see if you can send tokens to yourself as the seller ", async () => {
-       const { publicClient, paymentContract, deployer,buyer, sellerwallet, otherAccount } = await loadFixture(deployContract);
-      const price = parseEther("2");
-      const price2 = await paymentContract.write.pay([sellerwallet.account.address,], {
-        value: price,
-      }
-    );
+   it("should reject the transaction if the buyer is also the seller", async () => {
+    const { paymentContract, sellerwallet } = await loadFixture(deployContract);
+    const price = parseEther("2");
+
+    // This assertion is correct, and will now work after fixing the Chai configuration.
+    await expect(
+        paymentContract.write.pay([sellerwallet.account.address], {
+            value: price,
+            account: sellerwallet.account,
+        })
+    ).to.be.rejectedWith("Buyer cannot be the seller");
+});
      
   });
 
@@ -149,7 +153,7 @@ const transactionId = logs[0].args.transactionId;
 
   describe("cannot cancel a transaction after the time limit is exceeded", async () => {
     
-    it("try canceling a transaction after the 1 min time limit", async (done) => {
+    it("try canceling a transaction after the 1 min time limit", async () => {
     const { publicClient, paymentContract, deployer,buyer, sellerwallet, otherAccount } = await loadFixture(deployContract);
     const price = parseEther("2");
     const paidTxHash = await paymentContract.write.pay([ 
@@ -182,19 +186,17 @@ const transactionId = logs[0].args.transactionId;
 
   console.log("Transaction ID:", transactionId);
 
-    // Simulate waiting for more than 1 minute 
-    await new Promise(resolve => setTimeout(resolve, 61000)); // Wait for 61 seconds
-    try {
-      const cancelAfterLimitTxHash = await paymentContract.write.cancelOrder([transactionId], {
-        account: buyer.account.address,
-      });
-      const cancelAfterLimitReceipt = await publicClient.waitForTransactionReceipt({ hash: cancelAfterLimitTxHash });
-      expect(cancelAfterLimitReceipt.status).to.equal("reverted");
-    } catch (error) {
-      console.error("Cancellation after time limit exceeded:", error);
-      expect(error).to.exist; // Ensure that an error is thrown
-    }
-    done();
+  // Simulate waiting for more than 1 minute 
+  await new Promise(resolve => setTimeout(resolve, 61000)); // Wait for 61 seconds
+
+  await expect(paymentContract.write.cancelOrder([transactionId], {
+    account: buyer.account.address,
+})).to.be.rejectedWith("Order cancellation time limit exceeded");
+
+  // const cancelAfterLimitReceipt = await publicClient.waitForTransactionReceipt({ hash: cancelAfterLimitTxHash });
+  // expect(cancelAfterLimitReceipt.status).to.equal("reverted"); // Check if the transaction was reverted
+  
+   
      
      
     });
