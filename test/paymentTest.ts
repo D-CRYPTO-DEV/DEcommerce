@@ -202,63 +202,105 @@ const transactionId = logs[0].args.transactionId;
     });
   });
 
-  describe("when the voter interacts with the delegate function in the contract", async () => {
+  describe(" testing the goods receiption function", async () => {
     // TODO
-    it("should transfer voting power", async () => {
-      throw Error("Not implemented");
+    it("sending out final payment to seller", async () => {
+    const { publicClient, paymentContract, deployer,buyer, sellerwallet, otherAccount } = await loadFixture(deployContract);
+    const price = parseEther("2");
+    const sellerBalanceBefore = await publicClient.getBalance({
+      address: sellerwallet.account.address,
+    });
+    console.log("Seller balance before payment:", formatEther(sellerBalanceBefore));
+    const paidTxHash = await paymentContract.write.pay([ 
+      sellerwallet.account.address,
+    ], {
+      value: price,
+      account: buyer.account.address,
+    });
+
+    const acknowlegmentTxHash = await paymentContract.write.acknowledgeGoodsReceiption([sellerwallet.account.address], {
+      // Add any required options here, e.g. account: buyer.account.address
+      account: buyer.account
+    });
+
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: acknowlegmentTxHash });
+     const sellerBalanceAfter = await publicClient.getBalance({
+      address: sellerwallet.account.address,
+    });
+    console.log("Seller balance after payment:", formatEther(sellerBalanceAfter));
+    console.log("Acknowledgment transaction hash:", acknowlegmentTxHash);
+    expect(receipt.status).to.equal("success"); // Check if the transaction was successful
+    console.log("Goods receiption acknowledged successfully");
+    expect(await paymentContract.read.getPayment([sellerwallet.account.address, otherAccount.account.address])).to.equal(0n);
+    // Add your test logic here, for example: 
+    expect(sellerBalanceAfter).to.equal(sellerBalanceBefore + price);
+   
+
     });
   });
 
  
 
-  describe("when an account without right to vote interacts with the vote function in the contract", async () => {
+  describe("testing the getpayment functions", async () => {
     // TODO
-    it("should revert", async () => {
-      throw Error("Not implemented");
+    it("calling the getPaymentToDAO", async () => {
+      const { publicClient, paymentContract, deployer,buyer, sellerwallet, otherAccount } = await loadFixture(deployContract);
+      const price = parseEther("2");
+      const paytoDAOBefore = await paymentContract.read.PaymentsToDAO([
+        buyer.account.address
+      ],{
+      account: buyer.account
+      })
+      
+      const paidTxHash = await paymentContract.write.pay([ 
+        sellerwallet.account.address,
+      ], {
+        value: price,
+        account: buyer.account.address,
+      });
+
+      const paytoDAOafter = await paymentContract.read.PaymentsToDAO([
+        buyer.account.address
+      ],{
+      account: buyer.account
+      })
+
+      expect(paytoDAOafter - paytoDAOBefore ).to.equal(price)
     });
+
   });
 
-  describe("when an account without right to vote interacts with the delegate function in the contract", async () => {
+    describe("testing the getpayment  functions without theDAO", async () => {
     // TODO
-    it("should revert", async () => {
-      throw Error("Not implemented");
-    });
-  });
+    it("calling the getPayment", async () => {
+      const { publicClient, paymentContract, deployer,buyer, sellerwallet, otherAccount } = await loadFixture(deployContract);
+      const price = parseEther("2");
+      const paymentBefore = await paymentContract.read.getPayment([
+        sellerwallet.account.address,
+        buyer.account.address
+      ],{
+      account: buyer.account
+      })
+      
+      const paidTxHash = await paymentContract.write.pay([ 
+        sellerwallet.account.address,
+      ], {
+        value: price,
+        account: buyer.account.address,
+      });
 
-  describe("when someone interacts with the winningProposal function before any votes are cast", async () => {
-    // TODO
-    it("should return 0", async () => {
-      throw Error("Not implemented");
-    });
-  });
+      const paymentafter = await paymentContract.read.getPayment([
+        sellerwallet.account.address,
+        buyer.account.address
+      ],{
+      account: buyer.account
+      })
 
-  describe("when someone interacts with the winningProposal function after one vote is cast for the first proposal", async () => {
-    // TODO
-    it("should return 0", async () => {
-      throw Error("Not implemented");
+      expect(paymentafter - paymentBefore ).to.equal(price)
     });
-  });
 
-  describe("when someone interacts with the winnerName function before any votes are cast", async () => {
-    // TODO
-    it("should return name of proposal 0", async () => {
-      throw Error("Not implemented");
-    });
   });
-
-  describe("when someone interacts with the winnerName function after one vote is cast for the first proposal", async () => {
-    // TODO
-    it("should return name of proposal 0", async () => {
-      throw Error("Not implemented");
-    });
-  });
-
-  describe("when someone interacts with the winningProposal function and winnerName after 5 random votes are cast for the proposals", async () => {
-    // TODO
-    it("should return the name of the winner proposal", async () => {
-      throw Error("Not implemented");
-    });
-  });
+ 
   });
   });
 
