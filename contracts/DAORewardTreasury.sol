@@ -6,10 +6,10 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./interfaces/IDAOVoting.sol";
 
 /**
- * @title GovernorsRewardPay
+ * @title DAORewardTreasury
  * @dev Contract to distribute rewards to DAO members based on their voting performance
  */
-contract GovernorsRewardPay is Ownable {
+contract DAORewardTreasury is Ownable {
     // --- State Variables ---
     IDAOVoting public votingContract;
     IERC20 public rewardToken;
@@ -69,18 +69,15 @@ contract GovernorsRewardPay is Ownable {
         // Calculate reward amount with streak multiplier
         uint256 rewardAmount = calculateReward(newSuccessfulVotes, streak);
         
-        // Check treasury balance
-        require(rewardToken.balanceOf(address(this)) >= rewardAmount, "Insufficient reward token balance");
-        
-        // Update rewarded votes before transfer to prevent reentrancy
+        // Update rewarded votes
         rewardedVotes[governor] = successfulVotes;
         
         // Update last claim time
         lastClaimTime[governor] = block.timestamp;
         
-        // Transfer reward tokens - use safeTransfer pattern
-        bool success = rewardToken.transfer(governor, rewardAmount);
-        require(success, "Token transfer failed");
+        // Transfer reward tokens
+        require(rewardToken.balanceOf(address(this)) >= rewardAmount, "Insufficient reward token balance");
+        require(rewardToken.transfer(governor, rewardAmount), "Token transfer failed");
         
         emit RewardClaimed(governor, rewardAmount, newSuccessfulVotes, streak);
     }
@@ -151,10 +148,7 @@ contract GovernorsRewardPay is Ownable {
         require(amount > 0, "Amount must be greater than 0");
         require(rewardToken.balanceOf(address(this)) >= amount, "Insufficient balance");
         
-        // Use safeTransfer pattern
-        bool success = rewardToken.transfer(to, amount);
-        require(success, "Token transfer failed");
-        
+        require(rewardToken.transfer(to, amount), "Token transfer failed");
         emit FundsWithdrawn(to, amount);
     }
     
@@ -186,4 +180,4 @@ contract GovernorsRewardPay is Ownable {
         
         return reward;
     }
-}
+} 

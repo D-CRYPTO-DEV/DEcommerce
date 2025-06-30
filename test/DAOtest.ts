@@ -8,14 +8,11 @@ import path from "path";
 import { Address } from "viem";
 import hre from "hardhat";
 
-const PROPOSALS = ["Proposal 1", "Proposal 2", "Proposal 3"];
-const david = 0;
-const dalinton = 1;
-const trust = 2;
+
 async function deployContract() {
   const publicClient  = await viem.getPublicClient();
   const [deployer, otherAccount] = await viem.getWalletClients();
-  const BallotTokenContract = await viem.deployContract("BallotToken", [
+  const DAOContract = await viem.deployContract("DAOcode", [
   otherAccount.account.address,
   otherAccount.account.address
   ],

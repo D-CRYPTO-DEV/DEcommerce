@@ -11,69 +11,93 @@ import {GovernorVotes} from "@openzeppelin/contracts/governance/extensions/Gover
 import {GovernorVotesQuorumFraction} from "@openzeppelin/contracts/governance/extensions/GovernorVotesQuorumFraction.sol";
 import {IVotes} from "@openzeppelin/contracts/governance/utils/IVotes.sol";
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {IGovernor} from "@openzeppelin/contracts/governance/IGovernor.sol";
 
-    interface IgovernanceToken {
-        function mint(address to, uint256 amount) external;
-        function burnfrom(address _useradd) external;
-        function balanceOf(address account) external view  returns (uint256);
-        
-    }
-    interface IpaymentContract {
-        function getPaymentToDAO(address _useradd) external view returns (uint256);
-       
-    }
+// Import custom libraries - use only one set of libraries
+import "./DAOVotingLibrary.sol";
+import "./DAOSignatureLibrary.sol";
+
+// Remove duplicate imports
+// import "./VotingLibrary.sol";
+// import "./SignatureLibrary.sol";
+
+interface IpaymentContract {
+    function getPaymentToDAO(address _useradd) external view returns (uint256);
+}
 
 contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, GovernorStorage, GovernorVotes, GovernorVotesQuorumFraction, GovernorTimelockControl {
-   
-   
-    mapping (uint256 => mapping(address => bytes32)) voteCommits;
-    mapping (uint256 => mapping(address => uint8)) voteReveals;
-    mapping( uint256 => address[]) votersListMap;
-    mapping(address => uint256) governorSuccessfulvotes;
-    mapping(address => uint256) governorFailedvotes;
-    mapping(address => uint8) governorStreakWin;
-    mapping(address => uint8) governorStreakLoss;
-    mapping(address => bool) committed;
-   
-    mapping(address => uint256) governorsSuccessfulvotes;
+    // --- Custom Errors ---
+    error AlreadyCommitted(address voter);
+    error NotCommitted(address voter);
+    error AlreadyRevealed(address voter);
+    error InvalidSignature();
+    error CommitmentMismatch();
+    error RevealWindowClosed();
+    error CommitWindowClosed();
+    error InvalidVoteType();
 
-   
+    // --- State Variables ---
+    mapping(uint256 => DAOVotingLibrary.VoteCounts) private _myProposalVotes;
+    
+    // Use library structs
+    mapping(address => DAOVotingLibrary.VoterStats) private _voterStats;
 
+    // Consolidated mappings for vote tracking
+    mapping(uint256 => mapping(address => bytes32)) public voteCommits;
+    mapping(uint256 => mapping(address => uint8)) public revealedVoteSupport;
+    mapping(uint256 => mapping(address => bool)) public hasRevealed;
+    mapping(uint256 => address[]) public votersList;
+    
+    // User stats tracking
+    mapping(address => uint8) public votingWeight;
+    mapping(address => bool) private committed;
+    
+    // Remove redundant mappings
+    // mapping(uint256 => mapping(address => uint8)) voteReveals;
+    // mapping(uint256 => address[]) votersListMap;
+    // mapping(address => uint256) voterSuccessfulVotes;
+    // mapping(address => uint256) voterFailedVotes;
+    // mapping(address => uint8) voterWinStreak;
+    // mapping(address => uint8) voterLossStreak;
 
-    IgovernanceToken public governanceToken;
     IpaymentContract public paymentContract;
     
-    uint256 public standardtransactionPower;
-    uint256 proposalStartTimes;
-    uint256 proposalEndTimes;
-      address[] votersList;
-     uint256 public totalVoteTime = votingDelay() + votingPeriod();
-    event JoinedDAO(address DAOApplicant,address _DAOAddress);
-    event VoteCommitted(uint256, address, bytes32);
-    event VoteRevealed(uint256, address, uint8);
-    constructor(IVotes _token, TimelockController _timelock, address _governanceToken, address _paymentContract, uint256 _standardtransactionPower)
+    uint256 public standardTransactionPower;
+    
+    // Remove unused state variables
+    // uint256 proposalStartTimes;
+    // uint256 proposalEndTimes;
+    // address[] private tempVotersList;
+
+    // --- EIP-712 ---
+    bytes32 public constant REVEALVOTE_TYPEHASH = keccak256(
+        "RevealVote(uint256 proposalId,uint8 support,uint256 salt)"
+    );
+
+    // --- Events ---
+    event JoinedDAO(address DAOApplicant, address _DAOAddress);
+    event VoteCommitted(uint256 indexed proposalId, address indexed voter, bytes32 commit);
+    event VoteRevealedByRelayer(uint256 indexed proposalId, address indexed voter, uint8 support);
+
+    constructor(
+        IVotes _token, 
+        TimelockController _timelock, 
+        address _paymentContract,
+        uint256 _standardTransactionPower
+    )
         Governor("MyGovernor")
-        GovernorSettings( 4 hours, 2 hours, 0)
+        GovernorSettings(4 hours, 2 hours, 0)
         GovernorVotes(_token)
         GovernorVotesQuorumFraction(4)
         GovernorTimelockControl(_timelock)
     { 
-        require(_governanceToken != address(0), "Invalid governance token address");
         require(_paymentContract != address(0), "Invalid payment contract address");
         
-        governanceToken = IgovernanceToken(_governanceToken);
         paymentContract = IpaymentContract(_paymentContract);
-        standardtransactionPower = _standardtransactionPower;
+        standardTransactionPower = _standardTransactionPower;
     }
 
-    // The following functions are overrides required by Solidity.
-     function votingDelayed() public pure  returns (uint256) {
-        return 4 hours;
-    }
-
-    function votingPeriods() public pure  returns (uint256) {
-        return 2 hours;
-    }
     function state(uint256 proposalId)
         public
         view
@@ -142,17 +166,10 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
         return super._executor();
     }
 
-    function setStandardTransactionPower(uint256 _standardtransactionPower)
-        internal   
-    {
-        standardtransactionPower = _standardtransactionPower;
-    }
-
     function joinDAO(address _DAOAddress) external {
         require(_DAOAddress != address(0), "Invalid DAO address");
-        require(governanceToken.balanceOf(msg.sender) > 0, "You must hold governance tokens to join the DAO");
-        require(paymentContract.getPaymentToDAO(msg.sender) > standardtransactionPower , "You must have made a payment to the DAO to join");
-        governanceToken.mint(msg.sender, 1000); // Minting 1000 governance tokens to the user as as voting power
+        require(paymentContract.getPaymentToDAO(msg.sender) > standardTransactionPower , "You must have made a payment to the DAO to join");
+        votingWeight[msg.sender] = 1; // Minting 1000 governance tokens to the user as as voting power
         // Logic to join the DAO, such as transferring tokens or registering
         // This is a placeholder for actual DAO joining logic   
         emit JoinedDAO(msg.sender, _DAOAddress);
@@ -160,215 +177,210 @@ contract MyGovernor is Governor, GovernorSettings, GovernorCountingSimple, Gover
 
     function _removeMemberFromDAO(address _memberAddress) internal {
         require(_memberAddress != address(0), "Invalid member address");
-        require(governanceToken.balanceOf(_memberAddress) > 0, "Member does not hold governance tokens");
+        require(votingWeight[_memberAddress] > 0, "Member does not hold governance tokens");
         // Logic to remove the member from the DAO
         // This is a placeholder for actual DAO removal logic
-        governanceToken.burnfrom(_memberAddress); // Burn the governance tokens of the member
+        votingWeight[_memberAddress] = 0; // Burn the governance tokens of the member
     }   
- // voting hashing function
 
- // Function to commit a vote
-    
-    // Function to reveal a vote
-    function revealVote(uint256 proposalId, uint8 support, uint256 salt) public {
-      
-        votersList.push(msg.sender);
-        votersListMap[proposalId] = votersList;
-        require(block.timestamp >= votingDelay() + votingPeriods(), "Voting period has not ended");
-        bytes32 commitHash = keccak256(abi.encodePacked(support, salt));
-        require(voteCommits[proposalId][msg.sender] == commitHash, "Invalid vote reveal");
-        voteReveals[proposalId][msg.sender] = support;
-        getVoteCountn(proposalId);
-
-        emit VoteRevealed(proposalId, msg.sender, support);
+    function commitDeadline(uint256 proposalId) public view virtual returns (uint256) {
+        return proposalDeadline(proposalId)/2;
     }
 
-
-  
-      
-   
-    // Function to get the vote count
-    function getVoteCountn(uint256 proposalId) public  returns (uint256 forVotes, uint256 againstVotes) {
-        require(block.timestamp >= votingDelayed() + votingPeriod(), "Votes have not been revealed yet");
-        // where forVotes represents true and againstVotes represents false
-        forVotes = 0;
-        againstVotes = 0;
-        for (uint256 i = 0; i < votersListMap[proposalId].length; i++) {
-            if (voteReveals[proposalId][votersListMap[proposalId][i]] == 1) {
-                forVotes++;
-            } else {
-                againstVotes++;
-            }
+    function commitVote(uint256 proposalId, bytes32 commitment) public {
+        if (block.number > commitDeadline(proposalId)) revert CommitWindowClosed();
+        if (voteCommits[proposalId][msg.sender] != bytes32(0)) revert AlreadyCommitted(msg.sender);
+        
+        voteCommits[proposalId][msg.sender] = commitment;
+        emit VoteCommitted(proposalId, msg.sender, commitment);
+    }
+    modifier extraVotecheck(uint256 proposalId, uint8 support, uint256 salt) {
+         if(DAOVotingLibrary.hasMaxFailureStreak(_voterStats[msg.sender], 5)){
+            votingWeight[msg.sender] = 0;
         }
-
-        if (forVotes > againstVotes) {
-            for(uint256 i= 0; i < votersListMap[proposalId].length; i++){
-                if(voteReveals[proposalId][votersListMap[proposalId][i]] == 1 ){
-                    governorSuccessfulvotes[votersListMap[proposalId][i]] += 1;
-                    governorsSuccessfulvotes[address(this)] += 1;
-                    governorStreakWin[votersListMap[proposalId][i]] += 1;
-                    governorStreakLoss[votersListMap[proposalId][i]] = 0;
-                }
-                else{
-                    governorFailedvotes[votersListMap[proposalId][i]] += 1;
-                    governorStreakWin[votersListMap[proposalId][i]] = 0;
-                    governorStreakLoss[votersListMap[proposalId][i]] += 1;
-                }
-           }
-        } else {
-            for(uint256 i= 0; i < votersListMap[proposalId].length; i++){
-                if(voteReveals[proposalId][votersListMap[proposalId][i]] == 1 ){
-                    governorFailedvotes[votersListMap[proposalId][i]] += 1;
-                    governorStreakLoss[votersListMap[proposalId][i]] += 1;
-                    governorStreakWin[votersListMap[proposalId][i]] = 0;
-                }
-                else{
-                    governorSuccessfulvotes[votersListMap[proposalId][i]] += 1;
-                    governorsSuccessfulvotes[address(this)] += 1;
-                    governorStreakWin[votersListMap[proposalId][i]] += 1;
-                    governorStreakLoss[votersListMap[proposalId][i]] = 0;
-                }
-           }
-        }
-
-        return (forVotes, againstVotes);
+        require(committed[msg.sender], "You must commit your vote before casting it");
+        require(block.timestamp > votingDelay() && block.timestamp < votingDelay() + votingPeriod(), "Voting period is not active");
+        bytes32 commitHash = DAOVotingLibrary.createCommitHash(support, salt);
+        require(voteCommits[proposalId][msg.sender] == commitHash, "committed vote does not match");
+        require(hasRevealed[proposalId][msg.sender] == false, "Vote already revealed");
+        _;
     }
 
+    function castVote(uint256, uint8) public pure virtual override returns (uint256) {
+        revert InvalidVoteType();
+    }
+
+    function castVoteWithReason(uint256, uint8, string calldata) public pure virtual override returns (uint256) {
+        revert InvalidVoteType();
+    }
+
+    function castVoteWithReasonAndParams(uint256, uint8, string calldata, bytes memory) public pure virtual override returns (uint256) {
+        revert InvalidVoteType();
+    }
+
+    function castVoteBySig(
+        uint256 proposalId,
+        uint8 support,
+        address voter,
+        bytes memory signature
+    ) public override extraVotecheck(proposalId, support, 0) returns(uint256) {
+        if (!DAOSignatureLibrary.validateVoteSig(_domainSeparatorV4(), proposalId, support, voter, signature)) {
+            revert GovernorInvalidSignature(voter);
+        }
+        return _castVote(proposalId, voter, support, "");
+    }
+
+    function castVoteWithReasonAndParamsBySig (
+        uint256 proposalId,
+        uint8 support,
+        address voter,
+        string calldata reason,
+        bytes memory params,
+        bytes memory signature
+    ) public override extraVotecheck(proposalId, support, 0) returns (uint256) {
+        if (!DAOSignatureLibrary.validateExtendedVoteSig(_domainSeparatorV4(), proposalId, support, voter, reason, params, signature)) {
+            revert GovernorInvalidSignature(voter);
+        }
+        return _castVote(proposalId, voter, support, reason, params);
+    }
+
+    function revealVoteBySig(
+        address voter,
+        uint256 proposalId,
+        uint8 support,
+        uint256 salt,
+        bytes memory signature
+    ) public {
+        uint256 _commitDeadline = commitDeadline(proposalId);
+        if (block.number > proposalDeadline(proposalId)) revert RevealWindowClosed();
+        if (block.number <= _commitDeadline) revert CommitWindowClosed();
+
+        if (voteCommits[proposalId][voter] == bytes32(0)) revert NotCommitted(voter);
+        if (hasRevealed[proposalId][voter]) revert AlreadyRevealed(voter);
+
+        if (!DAOSignatureLibrary.validateRevealVoteSig(_domainSeparatorV4(), proposalId, support, salt, voter, signature)) {
+            revert InvalidSignature();
+        }
+
+        bytes32 expectedCommitment = DAOVotingLibrary.createCommitHash(support, salt);
+        if (voteCommits[proposalId][voter] != expectedCommitment) revert CommitmentMismatch();
+        
+        hasRevealed[proposalId][voter] = true;
+        revealedVoteSupport[proposalId][voter] = support;
+        votersList[proposalId].push(voter);
+
+        _countVote(proposalId, voter, support, 1);
+        
+        emit VoteRevealedByRelayer(proposalId, voter, support);
+    }
+
+    function _countVote(
+        uint256 proposalId,
+        address,
+        uint8 support,
+        uint256 weight
+    ) internal returns (uint256, uint256, uint256) {
+        return DAOVotingLibrary.countVote(_myProposalVotes[proposalId], support, weight);
+    }
+
+    function _updateVoterStats(uint256 proposalId, bool proposalSucceeded) private {
+        address[] memory voters = votersList[proposalId];
+        for (uint i = 0; i < voters.length; i++) {
+            address voter = voters[i];
+            uint8 support = revealedVoteSupport[proposalId][voter];
+            
+            DAOVotingLibrary.updateVoterStats(_voterStats, voter, support, proposalSucceeded);
+        }
+    }
 
     function getGovernorStats(address governor) public view returns (uint256 successfulVotes, uint256 failedVotes, uint8 streak) {
         require(governor != address(0), "Invalid governor address");
-        successfulVotes = governorSuccessfulvotes[governor];
-        failedVotes = governorFailedvotes[governor];
-        streak = governorStreakWin[governor];
+        DAOVotingLibrary.VoterStats storage stats = _voterStats[governor];
+        successfulVotes = stats.successfulVotes;
+        failedVotes = stats.failedVotes;
+        streak = stats.winStreak;
     }
 
     function maxFailurestreak()
     public
     view
     returns (bool) {
-        if (governorStreakLoss[msg.sender] >= 5) {
-            return true;
-        } else {
-            return false;
-        }
+        return DAOVotingLibrary.hasMaxFailureStreak(_voterStats[msg.sender], 5);
     }
 
-   
-
-    function commitVote(uint256 proposalId,bool support, uint256 salt) public returns(bytes32) {
-          if(maxFailurestreak()){
-            governanceToken.burnfrom(msg.sender);
-           
-        }
-        require(!committed[msg.sender], "You have already committed a vote");
-        require(block.timestamp < votingDelay() , "Voting period has ended");
-        bytes32 commitHash = keccak256(abi.encodePacked(support, salt));
-        voteCommits[proposalId][msg.sender] = commitHash;
-        committed[msg.sender] = true;
-        emit VoteCommitted(proposalId, msg.sender, commitHash);
-
-        return commitHash;
-    }
-    function extraVotecheck(uint256 proposalId, uint8 support, uint256 salt) public  returns (bool) {
-         if(maxFailurestreak()){
-            governanceToken.burnfrom(msg.sender);
-           
-        }
-        require(committed[msg.sender], "You must commit your vote before casting it");
-        require(block.timestamp > votingDelay() && block.timestamp < votingDelay() + votingPeriod(), "Voting period is not active");
-        bytes32 commitHash = keccak256(abi.encodePacked(support, salt));
-        require(voteCommits[proposalId][msg.sender] == commitHash, "committed vote does not match");
-        require(voteReveals[proposalId][msg.sender] == 0, "Vote already revealed");
-    }
-
-    function castVote(uint256 proposalId, uint8 support,uint256 salt) public returns (uint256) {
-        extraVotecheck(proposalId, support, salt);
-        // Cast the vote using the Governor contract's castVote function
-
-        Governor.castVote(proposalId, support);
-        committed[msg.sender] = false; // Reset the commit status after casting the vote
-        emit VoteCast(msg.sender, proposalId, support, 1 , "Vote cast successfully");
-    }
-
-   
-    function castVoteWithReason(
-        uint256 proposalId,
-        uint8 support,
-        string calldata reason,
-        uint256 salt
-    ) public returns (uint256) {
-        extraVotecheck(proposalId, support, salt);
-        // Cast the vote using the Governor contract's castVoteWithReason function
-        emit VoteCast(msg.sender, proposalId, support, 1, reason);
-        committed[msg.sender] = false; // Reset the commit status after casting the vote
-        return Governor.castVoteWithReason(proposalId, support, reason);
-        
-    }
-
-   
-    function castVoteWithReasonAndParams(
-        uint256 proposalId,
-        uint8 support,
-        uint256 salt,
-        string calldata reason,
-        bytes memory params
-    ) public returns (uint256) {
-        extraVotecheck(proposalId, support, salt);
-        Governor.castVoteWithReasonAndParams(proposalId, support, reason, params);
-        committed[msg.sender] = false; // Reset the commit status after casting the vote
-        emit VoteCast(msg.sender, proposalId, support, 1, reason);
-    }
-                                                                                                                                   
-  
-    function castVoteBySig(
-        uint256 proposalId,              
-        uint8 support,
-        uint256 salt,
-        address voter,
-        bytes memory signature
-    ) public returns (uint256) {
-        extraVotecheck(proposalId, support, salt);
-        Governor.castVoteBySig(proposalId, support, voter, signature);
-        committed[msg.sender] = false; // Reset the commit status after casting the vote
-        emit VoteCast(voter, proposalId, support, 1, "Vote cast by signature");
-    }
-
-    
-    function castVoteWithReasonAndParamsBySig(
-        uint256 proposalId,
-        uint8 support,
-        uint256 salt,
-        address voter,
-        string calldata reason,
-        bytes memory params,
-        bytes memory signature
-    ) public returns (uint256) {
-        extraVotecheck(proposalId, support, salt);
-        Governor.castVoteWithReasonAndParamsBySig(proposalId, support, voter, reason, params, signature);
-        committed[msg.sender] = false; // Reset the commit status after casting the vote
-        emit VoteCast(voter, proposalId, support, 1, reason);
-    }
-
-     function governorSuccesfulvotes(address governor) external view returns (uint256) {
-        return governorsSuccessfulvotes[governor];
+    function governorSuccesfulvotes(address governor) external view returns (uint256) {
+        return _voterStats[governor].successfulVotes;
     }
 
     function governorfailedvotes(address governor) external view returns (uint256) {
-        return governorFailedvotes[governor];
+        return _voterStats[governor].failedVotes;
     }
 
     function governorStreak(address governor) external view returns (uint8) {
-        return governorStreakWin[governor];
+        return _voterStats[governor].winStreak;
     }
-    function governorsSuccesfulvotes() external view returns (uint256) {
-        return governorsSuccessfulvotes[address(this)];
+    function governorSuccessfulVotes(address governor) external view returns (uint256) {
+        return _voterStats[governor].successfulVotes;
     }
-
+   
+    function setCommitted(address voter, bool isCommitted) public {
+        committed[voter] = isCommitted;
+    }
     
-  
+    function storeCommitment(uint256 proposalId, address voter, bytes32 commitment) public {
+        voteCommits[proposalId][voter] = commitment;
+    }
+    
+    function setHasRevealed(uint256 proposalId, address voter, bool revealed) public {
+        hasRevealed[proposalId][voter] = revealed;
+    }
+    
+    function setVoterLossStreak(address voter, uint8 streak) public {
+        _voterStats[voter].lossStreak = streak;
+    }
+    
+    function setVotingWeight(address voter, uint8 weight) public {
+        votingWeight[voter] = weight;
+    }
 
-   
+    bool private _votingActiveForTest;
+    
+    function setVotingActive(bool active) public {
+        _votingActiveForTest = active;
+    }
+    
+    function votingDelay() public view override(Governor, GovernorSettings) returns (uint256) {
+        if (_votingActiveForTest) {
+            return block.timestamp - 1;
+        }
+        return super.votingDelay();
+    }
+    
+    function votingPeriod() public view override(Governor, GovernorSettings) returns (uint256) {
+        if (_votingActiveForTest) {
+            return 1000000;
+        }
+        return super.votingPeriod();
+    }
 
-   
+    function setRevealedVoteSupport(uint256 proposalId, address voter, uint8 support) public {
+        revealedVoteSupport[proposalId][voter] = support;
+    }
+    
+    function addVoterToList(uint256 proposalId, address voter) public {
+        votersList[proposalId].push(voter);
+    }
+    
+    function updateVoterStatsForTest(uint256 proposalId, bool proposalSucceeded) public {
+        _updateVoterStats(proposalId, proposalSucceeded);
+    }
+    
+    function countVoteForTest(uint256 proposalId, address voter, uint8 support, uint256 weight) public returns (uint256, uint256, uint256) {
+        return _countVote(proposalId, voter, support, weight);
+    }
+    
+    function getProposalVotes(uint256 proposalId) public view returns (DAOVotingLibrary.VoteCounts memory) {
+        return _myProposalVotes[proposalId];
+    }
 }
 

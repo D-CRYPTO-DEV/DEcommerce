@@ -1,0 +1,23 @@
+{
+  "name": "decommerce-backend",
+  "version": "1.0.0",
+  "description": "Backend for decentralized marketplace with IPFS integration",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "start:ipfs": "node start-with-ipfs.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:ipfs": "node test-ipfs.js"
+  },
+  "dependencies": {
+    "body-parser": "^2.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.0.0",
+    "ethers": "^5.8.0",
+    "express": "^5.1.0",
+    "ipfs-http-client": "^60.0.1",
+    "jsonwebtoken": "^9.0.2",
+    "lowdb": "^7.0.1",
+    "mongoose": "^8.16.1"
+  }
+}
